@@ -7,54 +7,78 @@
 library(magrittr)
 library(mgcv)
   
-setwd("~/Documents/zika/microcephaly_Brazil/simulation_model/")
+#setwd("~/Documents/Collaboration/zika/microcephaly_Brazil/simulation_model/")
 
 data.births = data.frame(read.csv("../brasil_nejm_fig2.csv", stringsAsFactors = F))
 
-place.names=c("Brazil-Sao_Paulo","Brazil-Acre","Brazil-Bahia","Brazil-Espirito_Santo","Brazil-Goias",
-              "Brazil-Mato_Grosso","Brazil-Parana","Brazil-Pernambuco","Brazil-Rio_de_Janeiro","Brazil-Rio_Grande_do_Sul")
-epi.names <- c("SaoPaulo","Acre","Bahia","EspiritoSanto","GoianiaCity",
-               "MatoGrosso","Parana","Pernambuco","RioJaneiro","RioGrande")
+place.names=c("Brazil-Sao_Paulo",
+              "Brazil-Rio_Grande_do_Sul","Brazil-Acre","Brazil-Espirito_Santo",
+              "Brazil-Parana",
+              "Brazil-Goias","Brazil-Pernambuco",
+              "Brazil-Rio_de_Janeiro","Brazil-Mato_Grosso","Brazil-Bahia")
+
+epi.names <- c("SaoPaulo",
+               "RioGrande","Acre","EspiritoSanto",
+               "Parana",
+               "GoianiaCity","Pernambuco",
+               "RioJaneiro", "MatoGrosso","Bahia")
 
 # - - - - - - - - 
 
 # Convert into individual level data
-store.data.pos=NULL
-store.data.neg=NULL
-for(ii in 1:34){
-  store.data.pos=c(store.data.pos, rep(data.births[ii,"Week"],data.births[ii,"Pos.misc"]) )
-  store.data.neg=c(store.data.neg, rep(data.births[ii,"Week"],data.births[ii,"Neg.misc"]) )
+output_store_data <- function(all=F){
+
+  store.data.pos=NULL
+  store.data.neg=NULL
+  for(ii in 1:34){
+    # the misc columns exclude pregnancy losses
+    if(all==T){
+      store.data.pos=c(store.data.pos, rep(data.births[ii,"Week"],data.births[ii,"Pos.misc"]) )
+      store.data.neg=c(store.data.neg, rep(data.births[ii,"Week"],data.births[ii,"Neg.misc"]) )
+    }else{
+     store.data.pos=c(store.data.pos, rep(data.births[ii,"Week"],data.births[ii,"Pos"]) )
+      store.data.neg=c(store.data.neg, rep(data.births[ii,"Week"],data.births[ii,"Neg"]) )
+    }
+  }
+  
+  store.data=rbind(
+    cbind(store.data.pos,rep(1,length(store.data.pos))),
+    cbind(store.data.neg,rep(0,length(store.data.neg)))
+  )
+  
+  store.data=data.frame(store.data)
+  names(store.data)=c("Week","Positive")
+  store.data$Positive=as.factor(store.data$Positive)
+  
+  store.data
+
 }
-
-store.data=rbind(
-  cbind(store.data.pos,rep(1,length(store.data.pos))),
-  cbind(store.data.neg,rep(0,length(store.data.neg)))
-)
-
-store.data=data.frame(store.data)
-names(store.data)=c("Week","Positive")
-store.data$Positive=as.factor(store.data$Positive)
 
 #store.data=dataM
 
 # - - - - - - - - - 
 # Compare 2 models
 
-fitmodel1  = glm(Positive ~ Week ,data=store.data,family=binomial) %>% summary() 
-fitmodel2  = glm(Positive ~ 1 ,data=store.data,family=binomial) %>% summary() 
+compare_models <- function(store.data){
 
+  fitmodel1  = glm(Positive ~ Week ,data=store.data,family=binomial) %>% summary() 
+  fitmodel2  = glm(Positive ~ 1 ,data=store.data,family=binomial) %>% summary() 
+  
+  fitmodel1  = gam(Positive ~ s(Week) ,data=store.data,family=binomial)
+  #fitmodel1  = glm(Positive ~ Week ,data=store.data,family=binomial) #smooth.spline(x1,y1,w = NULL,2) # GCV
+  
+  
+  par(mar=c(4,4,1,1))
+  par(mgp=c(2,0.9,0))
+  
+  xx=data.births$Week
+  yy=data.births$Pos.misc/(data.births$Pos.misc+data.births$Neg.misc )
+  
+  plot(data.births$Week,yy,xlab="week" , ylab = "risk",ylim=c(0,1))
+  lines(data.births$Week,predict(glm.fitmodel,list(Week=data.births$Week),type="response") ,col="blue")
 
+}
 
-par(mar=c(4,4,1,1))
-par(mgp=c(2,0.9,0))
-
-xx=data.births$Week
-yy=data.births$Pos.misc/(data.births$Pos.misc+data.births$Neg.misc )
-
-plot(data.births$Week,yy,xlab="week" , ylab = "risk",ylim=c(0,1))
-lines(data.births$Week,predict(glm.fit,list(Week=data.births$Week),type="response") ,col="blue")
-
-#plot(c(1:39),predict(gam.fit,list(Week=c(1:39)),type="response") ,col="blue")
 
 # - - - - - - - - 
 # LOAD MICROCEPHALY DATA
@@ -103,36 +127,36 @@ load_timeseries <- function(epi.name="RioJaneiro"){
 # - - - - - - - - 
 # PLOT MICROCEPHALY AND ZIKA AND ESTIMATED INFECTION RISK
 
-plot_micro_zika <- function(place.name="Brazil-Rio_de_Janeiro", epi.name="RioJaneiro",repRate=0.1,micRate=0.1,micBackground){
+plot_micro_zika <- function(place.name="Brazil-Rio_de_Janeiro", epi.name="RioJaneiro",repRate=0.1,micRate=0.1,micBackground=0,y1lim,y2lim){
   
   # place.name="Brazil-Bahia"; epi.name="Bahia"
   # place.name="Brazil-Rio_de_Janeiro"; epi.name="RioJaneiro"; attackR=0.5
-  # place.name="Brazil-Espirito_Santo"; epi.name="EspiritoSanto"; repRate=0.15; micRate=4/49
+  # place.name="Brazil-Espirito_Santo"; epi.name="EspiritoSanto"; repRate=0.15; micRate=4/49; micBackground=0
   
   micro_timeseries <- get.microcephaly(place.name)
   data.cases <- load_timeseries(epi.name)
   
   pop_size = pop_sizes[pop_sizes$location==place.name,"Pop_2010"]
   
-  date.range=c("2015-01-01","2017-02-01") %>% as.Date()
+  date.range=c("2015-01-01","2017-12-31") %>% as.Date()
   casesZ=data.cases$total
-  casesPlot=casesZ*1e5/pop_size #1e5*casesZ/(6.32e6)
+  casesPlot=casesZ #*1e5/pop_size #1e5*casesZ/(6.32e6)
   
-  birthCount= pop_size*19.3/(52*1000)  # Multiply by proportion microcephaly
+  birthCount= pop_size*14/(52*1000)  # Multiply by birth rate 19.3
   microPlot=as.numeric(micro_timeseries$microcephaly)#1e6*as.numeric(micro_timeseries$microcephaly)/pop_size #/(6.32e6)
   microPlotCum=as.numeric(micro_timeseries$mc_total)#1e6*as.numeric(micro_timeseries$microcephaly)/pop_size #/(6.32e6)
   
   plot(data.cases$date, casesPlot, col="black", lwd=2,
        las=1, tck = -.03, mgp=c(3, .5, 0), cex.axis=0.9, bty="l",
-       xlim=date.range, xaxs="i", yaxs="i", xlab="", ylab="", type="l") # \n Microcephaly cases/10,000
-  mtext(side = 2, "Zika cases / 100,000", line = 2,cex=0.7)
+       xlim=date.range, xaxs="i", yaxs="i", xlab="", ylab="", type="l",ylim=y1lim) # \n Microcephaly cases/10,000
+  mtext(side = 2, "Zika cases", line = 2,cex=0.7)
   title(main=epi.name) 
   
 
   for(ii in 1:length(microPlot)){
     if(!is.na(microPlot[ii]) & microPlot[ii]>0){
      dateP=as.Date(micro_timeseries[ii,"date"])
-      lines(c(dateP,dateP),c(-1,0.05*max(casesPlot)),col=rgb(0,0,1,1),lwd=2) #microPlot[ii]/max(microPlot)
+      lines(c(dateP,dateP),c(-1,0.05*max(y1lim)),col=rgb(0,0,1,1),lwd=2) #microPlot[ii]/max(microPlot)
     }
   }
   
@@ -152,7 +176,7 @@ plot_micro_zika <- function(place.name="Brazil-Rio_de_Janeiro", epi.name="RioJan
   adverseMdian = micRate * birthCount*(probability.adverse$riskG+baselineM)
   adverseMed1st = micRate * birthCount*(probability.adverse$risk+baselineM)
   
-  binom.test(7,57,conf.level=0.95)$conf.int[1]
+  #binom.test(7,57,conf.level=0.95)$conf.int[1]
   
   #adverseUpper =  sapply( round(micRate * birthCount*(probability.adverse$riskG2+baselineU) ) ,function(yy){binom.test(x= yy,n=round(birthCount),conf.level=0.95)$conf.int[1] } ) 
 
@@ -163,7 +187,7 @@ plot_micro_zika <- function(place.name="Brazil-Rio_de_Janeiro", epi.name="RioJan
   
   # PLOT RAW DATA
   
-  plot(date.points,adverseMdian, col="red",yaxs="i",xaxs="i", lwd=2,ylim=ylimM, xlim=date.range,xlab="",ylab="",type="l",yaxt="n",xaxt="n")
+  plot(date.points,adverseMdian, col="red",yaxs="i",xaxs="i", lwd=2,ylim=y2lim, xlim=date.range,xlab="",ylab="",type="l",yaxt="n",xaxt="n")
   polygon(c(date.points,rev(date.points)),c(adverseLower,rev(adverseUpper)),lty=0 ,col=rgb(1,0,0,0.2))
   # Add first trimester and data
   lines(min(data.cases$date)+probability.adverse$birthweek*7-52*7,adverseMed1st,lty=2 ,col="red", lwd=2,ylim=c(0,1), xlim=date.range,xlab="",ylab="",type="l",yaxt="n",xaxt="n")
@@ -182,173 +206,17 @@ plot_micro_zika <- function(place.name="Brazil-Rio_de_Janeiro", epi.name="RioJan
   
   
   axis(4,col="red", col.axis="red", las=1, tck = -.03, mgp=c(3, .5, 0), cex.axis=0.9)
-  mtext("Number of births at risk of A0", side=4, line=2,col="red",cex=0.7) # Label for 2nd axis
+  mtext("Number of births at risk of APO", side=4, line=2,col="red",cex=0.7) # Label for 2nd axis
   
   
 }
 
-# - - - - - - - - 
-# RUN SIMULATED SCENARIOS
-
-simulate_zika <- function(simulated.data=NULL,attackRate=0.5,repRate=0.15){ # THIS FUNCTION BUILDS INTO plot_simulated_scenarios
-  
-  # simulated.data=NULL; attackRate=0.5; repRate=0.15 
-  
-  date.range=c(0:(52*4)) # NOTE THIS IS IN WEEKS
-   
-  #plot(date.range,simulated.data,type="l")
-
-  pop_size = 1e6
-  
-  casesPlot = repRate*attackRate*pop_size*simulated.data/sum(simulated.data) #1e5*casesZ/(6.32e6)
-  
-  birthCount= pop_size/1000  # Multiply by proportion microcephaly
-
-  plot(date.range, casesPlot, col="black", lwd=2,
-       las=1, tck = -.03, cex.axis=0.9, bty="l",
-       xlim=c(min(date.range),max(date.range)),xlab="week", xaxs="i", yaxs="i", ylab="", type="l") # \n Microcephaly cases/10,000
-  mtext(side = 2, "Zika cases / 100,000", line = 2,cex=0.7)
-
-
-  # Define baseline AO risk and plot estimates vs Microcephaly cases
-  micBackground = 0
-  baselineM=micBackground; baselineU=micBackground; baselineL=micBackground;
-  probability.adverse <- output_risk(attack.rate = attackRate, casesPlot)
-
-  ylimM=1.01*(c(0,max(birthCount*probability.adverse$riskG2)))
-
-  par(new=TRUE)
-
-  adverseMdian = birthCount*(probability.adverse$riskG+baselineM)
-  adverseMed1st = birthCount*(probability.adverse$risk+baselineM)
-  adverseUpper = birthCount*(probability.adverse$riskG1+baselineL)
-  adverseLower =  birthCount*(probability.adverse$riskG2+baselineU)
-  
-  date.points = probability.adverse$birthweek - 52
-  
-
-  ylimM=1.05*(c(0,max(birthCount*probability.adverse$riskG2)))
-  
-  # PLOT RAW DATA
-  date.rangeP = date.points #c(0:(max(date.range)+104))
-  
-  plot(date.rangeP,adverseMdian, col="red",yaxs="i",xaxs="i", lwd=2,ylim=ylimM, xlim=c(min(date.range),max(date.range)),xlab="",ylab="",type="l",yaxt="n",xaxt="n")
-  
-  polygon(c(date.rangeP,rev(date.rangeP)),c(adverseLower,rev(adverseUpper)),lty=0 ,col=rgb(1,0,0,0.2))
-  # Add first trimester and data
-  lines(date.rangeP,adverseMed1st,lty=2 ,col="red", lwd=2,ylim=c(0,1))
-  
-  axis(4,col="red", col.axis="red", las=1, tck = -.03, mgp=c(3, .5, 0), cex.axis=0.9)
-  mtext("Risk of Zika APO / 1000 births", side=4, line=2,col="red",cex=0.7) # Label for 2nd axis
-  
-  
-}
-
-# - - - - - - - - 
-# PLOT SIMULATIONS ACROSS MULTIPLE SCENARIOS
-
-plot_simulated_scenarios <- function(){
-  
-
-  par(mfrow=c(3,1))
-  par(las=0)
-  par(mar=c(3.5,3.5,1,3.5))
-  par(mgp=c(2,0.5,0))
-  
-  simulated.data1 = dnorm(x=date.range,mean = 40 ,sd = 5)
-  simulated.data2 = dnorm(x=date.range,mean = 40 ,sd = 15) + dnorm(x=date.range,mean = 92 ,sd = 18)
-  simulated.data3 = sin(2*pi*(date.range/52-0.25))+1
-  
-  simulate_zika(simulated.data1); title(LETTERS[1],adj=0)
-  simulate_zika(simulated.data2); title(LETTERS[2],adj=0)
-  simulate_zika(simulated.data3); title(LETTERS[3],adj=0)
-  
-  dev.copy(pdf,paste("plots/timeseries_sim.pdf",sep=""),width=3,height=6)
-  dev.off()
-  
-  
-}
-
-
-# - - - - - - - - 
-# DO ML FIT FOR REPORTING RATE
-
-fit_micro_zika <- function(place.name="Brazil-Rio_de_Janeiro", epi.name="RioJaneiro",repRate=0.1,micRate=0.1,micBackground){
-  
-  # place.name="Brazil-Sao_Paulo"; epi.name="SaoPaulo"; repRate=0.15; micRate=4/49
-  
-  micro_timeseries <- get.microcephaly(place.name)
-  data.cases <- load_timeseries(epi.name)
-  pop_size = pop_sizes[pop_sizes$location==place.name,"Pop_2010"]
-  
-  date.range=c("2015-01-01","2017-02-01") %>% as.Date()
-  casesZ=data.cases$total
-  casesPlot=casesZ*1e5/pop_size #1e5*casesZ/(6.32e6)
-  
-  birthCount= pop_size*19.3/(52*1000)  # Multiply by proportion microcephaly
-  microPlot=as.numeric(micro_timeseries$microcephaly)#1e6*as.numeric(micro_timeseries$microcephaly)/pop_size #/(6.32e6)
-  baselineM=micBackground; baselineU=micBackground; baselineL=micBackground # Use Johansson et al baseline
-  
-  
-  # Define repRate likelihood
-  repRateTest = seq(0.1*repRate,2*repRate,0.2*repRate)
-  store.Likelihood = NULL
-  
-  for(repRateI in repRateTest){
-  
-    probability.adverse <- output_risk(attack.rate = (sum(casesZ)/repRateI)/pop_size, casesZ)
-    adverseMdian = micRate * birthCount*(probability.adverse$riskG+baselineM)
-    adverseMed1st = micRate * birthCount*(probability.adverse$risk+baselineM)
-  
-    # Fit microcephaly data
-    
-    microPlot[microPlot<0]=NA # remove invalid cumulative values
-  
-    match.dates = sapply(as.Date(micro_timeseries$date),function(x){ abs(x-date.points) %>% which.min() })
-    
-    likelihood.micro = dpois(microPlot,adverseMdian[match.dates],log=T) 
-    likelihood.sum = likelihood.micro[!is.na(likelihood.micro)] %>% sum()
-    
-    store.Likelihood = rbind(store.Likelihood, c(repRateI, likelihood.sum))
-    
-  }
-
-  # Pick maximum likelihood
-  ML.pick = which.max(store.Likelihood[,2])
-  ML.rep = repRateTest[ML.pick]
-  if(ML.pick==1 | ML.pick==length(repRateTest)){outputA = -1}else{outputA = ML.rep}
-  
-  outputA
-  
-}
 
 # - - - - - - - - 
 # PLOT ESTIMATES ACROSS MULTIPLE REGIONS
 
-plot_multiple_regions <- function(place.names,epi.names,reportA=0.1,micro.prop=(4/49)){
+plot_multiple_regions <- function(place.names,epi.names,reportA=0.15,micro.prop=(4/49)){
   
-  #if(length(place.names)!=length(epi.names)){return("need same # data sets for Zika and microcephaly")}
-  #reportA=c(0.9,1.0,0.25,0.25,  1.0,0.8,0.1,0.75)
-  # 
-  # micro.prop = 1; micBackground = 0 
-  
-  reportA=c(0.15,0.17,0.025,0.025,0.24,
-            0.2,0.01,0.08,0.08,0.015)
-  
-  reportA=0.15
-  
-  # FIT DATA - DEPRECATED
-  
-  #store_fit=rep(NA,length(place.names))
-  #for(ii in 1:length(place.names)){
-  #  if(length(reportA)==1){reportA1=reportA}else{reportA1=reportA[ii]}
-  #  store_fit[ii] = fit_micro_zika(place.name=place.names[ii],epi.name=epi.names[ii],repRate = reportA1,micRate = micro.prop)
-  #}
-  
-  #reportA = c(0.1350,  0.0850,  0.0225,  0.0225,  0.2640, 
-  #            0.2, 0.01,  0.0720,  0.0560,  0.0165)
-  
-  #reportA=rep(0.15,8)
   
   #par(mfrow=c(2,5))
   par(mfrow=c(3,3))
@@ -357,12 +225,18 @@ plot_multiple_regions <- function(place.names,epi.names,reportA=0.1,micro.prop=(
   par(mgp=c(2,0.7,0))
   
   for(ii in 2:length(place.names)){
+    
+    # Define ranges for each location
+    if(ii>1 & ii<=4){y1lim=c(0,3e2); y2lim=c(0,3)}
+    if(ii>4 & ii<=7){y1lim=c(0,1.2e3); y2lim=c(0,10)}
+    if(ii>7 & ii<=10){y1lim=c(0,7e3); y2lim=c(0,60)}
     if(length(reportA)==1){reportA1=reportA}else{reportA1=reportA[ii]}
-    plot_micro_zika(place.name=place.names[ii],epi.name=epi.names[ii],repRate = reportA1,micRate = 1, micBackground = 0 ) #2/10000)
+    plot_micro_zika(place.name=place.names[ii],epi.name=epi.names[ii],repRate = reportA1,micRate = 1, micBackground = 0,y1lim,y2lim ) #2/10000)
     title(LETTERS[ii],adj=0)
+    
   }
   
-  dev.copy(pdf,paste("plots/timeseries.pdf",sep=""),width=8,height=7)
+  dev.copy(pdf,paste("plots/timeseries_report_",round(10*reportA),".pdf",sep=""),width=8,height=7)
   dev.off()
   
   
@@ -373,7 +247,7 @@ plot_multiple_regions <- function(place.names,epi.names,reportA=0.1,micro.prop=(
 #baselineAOt=binom.test(7,57,conf.level=0.95)
 #baselineAO=c(as.numeric(baselineAOt$estimate), baselineAOt$conf.int %>% as.numeric())
 
-#glm.fit=glm(y1 ~ x1)
+#glm.fitmodel=glm(y1 ~ x1)
 
 #par(mfrow=c(1,1))
 
@@ -381,9 +255,9 @@ plot_multiple_regions <- function(place.names,epi.names,reportA=0.1,micro.prop=(
 # - - - - - - - - 
 # Bootstrap CI
 
-bootstrap.gam <- function(){
+bootstrap.gam <- function(store.data){
   
-  # Fit splines
+  # Fit splines - use 1000 bootstraps
   runs=1000
   
   # Do bootstrap CIs
@@ -437,18 +311,19 @@ bootstrap.gam <- function(){
   
   # PLOT DATA
   
-  plot(data.births$Week,yy,pch=19,col="white",cex=1, ylab = "risk", xlab="week",ylim=c(0,1),xlim=c(0,39))
+  #plot(data.births$Week,yy,pch=19,col="white",cex=1, ylab = "risk", xlab="week",ylim=c(0,1),xlim=c(0,39))
   
-  lines(predict.x,predo,col=rgb(0,0,1),lwd = 2)
-  polygon(c(predict.x,rev(predict.x)),c(maxbts,rev(minbts)),col=rgb(0,0,1,0.15),lty=0)
+  #lines(predict.x,predo,col=rgb(0,0,1),lwd = 2)
+  #polygon(c(predict.x,rev(predict.x)),c(maxbts,rev(minbts)),col=rgb(0,0,1,0.15),lty=0)
   #oints(data.births$Week,yy,pch=19,col="black",cex=0.5)
-  points(store.data$Week,as.numeric(store.data$Positive==1),pch=19,col=rgb(0,0,0,0.15),cex=0.5)
+  #points(store.data$Week,as.numeric(store.data$Positive==1),pch=19,col=rgb(0,0,0,0.15),cex=0.5)
   
   #lines(xx,minbts,col=rgb(0.8,0,0),lwd = 2)
   #grid(lwd = 1) # grid 
   
   gamCI=data.frame(cbind(predict.x,minbts,maxbts))
   
+  gamCI
   #write.csv(gamCI,"glmCI.csv")
   
 }
@@ -509,7 +384,7 @@ output_risk <- function(attack.rate = 0.5, casesZ){
 }
 
 
-# Supplement Ferguson et al Data with CDC Cumulative tallies
+# Supplement Ferguson et al Data with CDC Cumulative tallies -  DEPRECATED
 
 augment_data_files <- function(){
   
@@ -560,4 +435,87 @@ augment_data_files <- function(){
   
 }
 
+# - - - - - - - - 
+# RUN SIMULATED SCENARIOS
+
+simulate_zika <- function(simulated.data=NULL, attackRate=0.5, repRate=0.17, axesLabels=TRUE){ # THIS FUNCTION BUILDS INTO plot_simulated_scenarios
+  
+  # simulated.data=NULL; attackRate=0.5; repRate=0.15 
+  pop_size = 1e6
+  date.range=c(0:(52*4)) # NOTE THIS IS IN WEEKS
+  
+  casesPlot = repRate*attackRate*pop_size*simulated.data/sum(simulated.data) #1e5*casesZ/(6.32e6)
+  
+  birthCount= pop_size/1000  # Convert to births per 1,000
+  
+  ylim <- 1.05*max(casesPlot)
+  # Plot simulated data
+  plot(date.range, casesPlot, col="black", lwd=2,
+       las=1, tck = -.03, cex.axis=0.9, bty="l", ylim=c(0, ylim),
+       xlim=c(min(date.range), max(date.range)), xlab="week", 
+       xaxs="i", yaxs="i", ylab="", type="l") 
+  
+  if(axesLabels) {
+    mtext(side = 2, "Zika cases", line=2.5, cex=0.7) # per 100,000
+  }
+  
+  # Define baseline AO risk and plot estimates vs Microcephaly cases
+  micBackground = 0
+  baselineM=micBackground; baselineU=micBackground; baselineL=micBackground;
+  probability.adverse <- output_risk(attack.rate = attackRate, casesPlot)
+  
+  ylimM=1.01*(c(0,max(birthCount*probability.adverse$riskG2)))
+  
+  par(new=TRUE)
+  
+  adverseMdian = birthCount*(probability.adverse$riskG+baselineM)
+  adverseMed1st = birthCount*(probability.adverse$risk+baselineM)
+  adverseUpper = birthCount*(probability.adverse$riskG1+baselineL)
+  adverseLower =  birthCount*(probability.adverse$riskG2+baselineU)
+  
+  date.points = probability.adverse$birthweek - 52
+  
+  # PLOT simulated APOs
+  date.rangeP = date.points #c(0:(max(date.range)+104))
+  
+  plot(date.rangeP, adverseMdian, col="red", yaxs="i", xaxs="i", lwd=2, 
+       ylim=ylimM, xlim=c(min(date.range),max(date.range)), xlab="", ylab="", 
+       type="l", yaxt="n", xaxt="n", bty="n")
+  
+  polygon(c(date.rangeP, rev(date.rangeP)), c(adverseLower,rev(adverseUpper)), lty=0 , col=rgb(1,0,0,0.2))
+  # Add first trimester and data
+  lines(date.rangeP, adverseMed1st, lty=2, col="red", lwd=2, ylim=c(0,1), bty="n")
+  
+  axis(4, col="red", col.axis="red", las=1, tck = -.03, mgp=c(3, .5, 0), cex.axis=0.9)
+  if(axesLabels) {
+    mtext("Risk of Zika APO per 1000 births", side=4, line=2, col="red",cex=0.7) # Label for 2nd axis
+  }
+}
+
+# - - - - - - - - 
+# PLOT SIMULATIONS ACROSS MULTIPLE SCENARIOS
+
+plot_simulated_scenarios <- function(reportVal=0.17){
+  
+  par(mfrow=c(3,1))
+  par(las=0)
+  par(mar=c(3.5,3.5,1,3.5))
+  par(mgp=c(2,0.5,0))
+  
+  date.range=c(0:(52*4)) # NOTE THIS IS IN WEEKS
+  
+  simulated.data1 = dnorm(x=date.range,mean = 40 ,sd = 5)
+  simulated.data2 = dnorm(x=date.range,mean = 40 ,sd = 15) + dnorm(x=date.range,mean = 92 ,sd = 18)
+  simulated.data3 = sin(2*pi*(date.range/52-0.25))+1
+  simulated.data3[53:104] <- 0
+  simulated.data3[157:209] <- 0
+  
+  simulate_zika(simulated.data1, axesLabels=F,repRate = reportVal); title(LETTERS[1], adj=0)
+  simulate_zika(simulated.data2,repRate = reportVal); title(LETTERS[2], adj=0)
+  simulate_zika(simulated.data3, axesLabels=F,repRate = reportVal); title(LETTERS[3], adj=0)
+  
+  dev.copy(pdf, paste("plots/timeseries_sim.pdf",sep=""), width=4, height=4.5)
+  dev.off()
+  
+}
 
